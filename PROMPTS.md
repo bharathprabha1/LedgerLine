@@ -46,7 +46,7 @@ Checked the required identifier, authenticated again, and distinguished authenti
 
 
 
-**Actual commit:** Pending - add the real Git commit URL after committing the corresponding implementation.
+**Actual commit:** [Initial implementation](https://github.com/bharathprabha1/LedgerLine/commit/fe2e87c)
 
 
 
@@ -86,7 +86,7 @@ Reviewed the account ownership rules and the relationship between ledger entries
 
 
 
-**Actual commit:** Pending - add the real Git commit URL after committing the corresponding implementation.
+**Actual commit:** [Initial implementation](https://github.com/bharathprabha1/LedgerLine/commit/fe2e87c)
 
 
 
@@ -130,7 +130,7 @@ Used the intended account-holder test identity rather than weakening the authori
 
 
 
-**Actual commit:** Pending - add the real Git commit URL if the related authorization implementation or tests are committed.
+**Actual commit:** [Initial implementation](https://github.com/bharathprabha1/LedgerLine/commit/fe2e87c) and [API security tests](https://github.com/bharathprabha1/LedgerLine/commit/b4e2d64)
 
 
 
@@ -174,7 +174,7 @@ Reviewed the ownership restrictions and distinguished the administrator, auditor
 
 
 
-**Actual commit:** Pending - add the real Git commit URL after committing the corresponding implementation or tests.
+**Actual commit:** [Initial implementation](https://github.com/bharathprabha1/LedgerLine/commit/fe2e87c) and [API security tests](https://github.com/bharathprabha1/LedgerLine/commit/b4e2d64)
 
 
 
@@ -214,7 +214,7 @@ Used a fresh idempotency key for a new transaction request and retained the conf
 
 
 
-**Actual commit:** Pending - add the real Git commit URL after committing the corresponding implementation or tests.
+**Actual commit:** [Initial implementation](https://github.com/bharathprabha1/LedgerLine/commit/fe2e87c)
 
 
 
@@ -234,6 +234,5 @@ The developer checked API responses, database records, authorization behavior, a
 
 
 
-The commit references above must be replaced with actual GitHub commit URLs. No commit or test result should be claimed unless it exists and has been verified.
-
+All commit references above point to actual commits created during development. Implementation and test claims reflect the work and results verified by the developer.
 
