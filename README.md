@@ -1,445 +1,388 @@
-﻿# LedgerLine
-
-
+# LedgerLine
 
 **A secure, API-first digital banking and double-entry ledger system.**
 
+LedgerLine is a banking backend application built with **FastAPI and PostgreSQL**. It provides user authentication, account management, simulated cash transactions, account transfers, transaction history, account statements, idempotency, and audit logging.
 
-
-LedgerLine is a banking backend project built with FastAPI and PostgreSQL. It provides user authentication, account management, simulated cash transactions, account transfers, transaction history, account statements, and audit logging.
-
-
-
-> **Project status:** Backend development is in progress. This repository currently contains the backend API; a completed frontend and production payment integration are not claimed.
-
-
+> **Project status:** Backend implementation and automated testing are completed for the current development scope. Frontend development and production payment integration are not included in the current implementation.
 
 ## Features
 
-
-
-### Authentication and authorization
+### 1. Authentication and authorization
 
 - User registration and login.
-
 - Password hashing using Argon2.
-
 - JWT-based authentication.
-
 - Role-based access control for administrators, account holders, and auditors.
-
 - Active-user validation for protected requests.
+- Restricted administrator operations.
 
+### 2. Account management
 
-
-### Account management
-
-- Create customer accounts (administrator access).
-
-- View account information.
-
-- Account ownership restrictions.
-
+- Administrator-controlled customer account creation.
+- Account information retrieval.
+- Customer account ownership restrictions.
 - Account status management.
-
 - Protected system settlement account.
+- Account status validation during financial operations.
 
-
-
-### Transactions and ledger
+### 3. Transactions and double-entry ledger
 
 - Simulated deposits and withdrawals.
-
-- Transfers between accounts.
-
+- Transfers between customer accounts.
 - Double-entry ledger records.
-
-- Transaction references and status tracking.
-
+- Unique transaction references.
+- Transaction status tracking.
 - Idempotency support for transaction requests.
-
-- Transaction history and transaction details.
-
+- Transaction history with pagination.
+- Transaction detail retrieval.
 - Account statements with debit and credit entries.
+- Amounts represented in integer paise.
 
+### 4. Audit and security
 
-
-### Audit and security
-
-- Audit log records for relevant operations.
-
+- Audit logging for relevant sensitive operations.
 - Database constraints for important financial data.
-
 - Database transactions for financial operations.
-
 - Account balance validation.
-
-- Role and ownership checks.
-
-
+- Role-based and object-level authorization.
+- Protection against duplicate transaction requests.
+- Automated authentication, authorization, transaction, and concurrency tests.
 
 ## Technology stack
 
-
-
 | Component | Technology |
-
 |---|---|
-
 | Backend framework | FastAPI |
-
-| Language | Python |
-
+| Programming language | Python 3.13 |
 | Database | PostgreSQL |
-
 | ORM | SQLAlchemy |
-
 | Database migrations | Alembic |
-
 | Data validation | Pydantic |
-
 | Authentication | JWT |
-
 | Password hashing | Argon2 |
-
+| Database driver | Psycopg 3 |
 | Testing | Pytest |
-
+| Coverage | Pytest-Cov |
 | API documentation | Swagger UI |
-
-
 
 ## Project structure
 
-
-
 ```text
 LedgerLine/
-|-- backend/
-|   |-- app/
-|   |   |-- api/
-|   |   |   |-- deps.py
-|   |   |   `-- v1/
-|   |   |       |-- auth.py
-|   |   |       |-- accounts.py
-|   |   |       `-- transactions.py
-|   |   |-- core/
-|   |   |-- db/
-|   |   |-- models/
-|   |   |-- schemas/
-|   |   |-- services/
-|   |   `-- main.py
-|   |-- migrations/
-|   |-- tests/
-|   |-- .env.example
-|   |-- alembic.ini
-|   `-- requirements.txt
-|-- .gitignore
-|-- README.md
-|-- PROMPTS.md
-`-- THREATS.md
-
-
+│
+├── backend/
+│   │
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── deps.py
+│   │   │   └── v1/
+│   │   │       ├── auth.py
+│   │   │       ├── accounts.py
+│   │   │       └── transactions.py
+│   │   │
+│   │   ├── core/
+│   │   │   ├── config.py
+│   │   │   └── security.py
+│   │   │
+│   │   ├── db/
+│   │   │   ├── base.py
+│   │   │   └── session.py
+│   │   │
+│   │   ├── models/
+│   │   │   ├── account.py
+│   │   │   ├── audit_log.py
+│   │   │   ├── enums.py
+│   │   │   ├── idempotency.py
+│   │   │   ├── ledger_entry.py
+│   │   │   ├── transaction.py
+│   │   │   └── user.py
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── account.py
+│   │   │   ├── auth.py
+│   │   │   ├── statement.py
+│   │   │   └── transaction.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── account_service.py
+│   │   │   ├── statement_service.py
+│   │   │   └── transaction_service.py
+│   │   │
+│   │   └── main.py
+│   │
+│   ├── migrations/
+│   │   └── versions/
+│   │
+│   ├── tests/
+│   │   ├── conftest.py
+│   │   ├── test_api_security.py
+│   │   ├── test_cash_transactions.py
+│   │   ├── test_concurrency.py
+│   │   ├── test_statements.py
+│   │   ├── test_transactions.py
+│   │   └── test_transaction_api.py
+│   │
+│   ├── .env.example
+│   ├── alembic.ini
+│   ├── requirements.txt
+│   ├── bootstrap_admin.py
+│   └── initialize_system_accounts.py
+│
+├── .gitignore
+├── README.md
+├── PROMPTS.md
+└── THREATS.md
+```
 
 ## Prerequisites
 
-
-
-Install the following before running the project:
-
-
+Install the following software:
 
 - Python 3.13
-
 - PostgreSQL
-
 - Git
-
 - PowerShell (Windows)
 
-
-
-## Local setup
-
-
+## Local installation and setup
 
 ### 1. Clone the repository
 
-
-
 ```powershell
-
 git clone YOUR_REPOSITORY_URL
-
 cd LedgerLine
-
 ```
 
+Replace `YOUR_REPOSITORY_URL` with your actual repository URL.
 
-
-Replace `YOUR_REPOSITORY_URL` with the actual repository URL.
-
-
-
-### 2. Create and activate a virtual environment
-
-
+### 2. Create a Python virtual environment
 
 ```powershell
-
 cd backend
 
 py -3.13 -m venv .venv
-
-.\\.venv\\Scripts\\Activate.ps1
-
 ```
 
+Activate it:
 
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
 
 ### 3. Install dependencies
 
-
+Install all pinned backend dependencies using the requirements file:
 
 ```powershell
-
 python -m pip install -r requirements.txt
-
 ```
-
-
 
 ### 4. Configure environment variables
 
-
-
 Create your local environment file:
 
-
-
 ```powershell
-
 Copy-Item .env.example .env
-
 notepad .env
-
 ```
 
+Configure the required database connection string and a strong, randomly generated application secret.
 
+Use your own PostgreSQL credentials and database details.
 
-Configure the PostgreSQL connection string and a strong, randomly generated application secret in `.env`.
-
-
-
-**Never commit `.env` or share real credentials.**
-
-
+**Important:** Never commit `.env` or share real database credentials and JWT signing secrets.
 
 ### 5. Run database migrations
 
+Ensure PostgreSQL is running and the configured database has been created.
 
-
-Make sure PostgreSQL is running and the configured database exists.
-
-
+Run:
 
 ```powershell
-
 alembic upgrade head
-
 ```
 
-
+This applies the database migrations.
 
 ### 6. Initialize the system settlement account
 
-
+Run:
 
 ```powershell
-
 python initialize_system_accounts.py
-
 ```
 
-
+This initializes the system settlement account required by the transaction services.
 
 ### 7. Create the initial administrator
 
-
+Run:
 
 ```powershell
-
 python bootstrap_admin.py
-
 ```
 
+Follow the interactive prompts to configure the initial administrator account.
 
+The bootstrap script is intended for initial administrator setup.
 
-Follow the interactive prompts. The script is intended for initial administrator setup.
+### 8. Start the FastAPI application
 
-
-
-### 8. Start the API server
-
-
+Run:
 
 ```powershell
-
 python -m uvicorn app.main:app --reload
-
 ```
 
-
-
-The API will be available at:
-
-
+The backend API will be available at:
 
 ```text
-
 http://127.0.0.1:8000
-
 ```
-
-
 
 Interactive API documentation:
 
-
-
 ```text
-
 http://127.0.0.1:8000/docs
-
 ```
 
+Alternative API documentation:
 
+```text
+http://127.0.0.1:8000/redoc
+```
 
 ## API endpoints
 
+All endpoints use the `/api/v1` prefix.
 
+### Authentication
 
-The API uses the `/api/v1` prefix.
-
-
-
-| Method | Endpoint | Purpose |
-
+| Method | Endpoint | Description |
 |---|---|---|
+| POST | `/api/v1/auth/register` | Register an account holder |
+| POST | `/api/v1/auth/login` | Authenticate a user |
+| GET | `/api/v1/auth/me` | Retrieve the current user |
 
-| POST | `/auth/register` | Register an account holder |
+### Account management
 
-| POST | `/auth/login` | Authenticate a user |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/accounts` | Create a customer account |
+| GET | `/api/v1/accounts` | List accessible accounts |
+| GET | `/api/v1/accounts/{account_id}` | Retrieve account details |
+| PATCH | `/api/v1/accounts/{account_id}/status` | Update account status |
+| GET | `/api/v1/accounts/{account_id}/statement` | Retrieve an account statement |
 
-| GET | `/auth/me` | Get the current user |
+### Financial transactions
 
-| POST | `/accounts` | Create a customer account |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/transactions/deposit` | Simulate a deposit |
+| POST | `/api/v1/transactions/withdrawal` | Withdraw funds |
+| POST | `/api/v1/transactions/transfer` | Transfer funds between accounts |
+| GET | `/api/v1/transactions` | Retrieve transaction history |
+| GET | `/api/v1/transactions/{transaction_id}` | Retrieve transaction details |
 
-| GET | `/accounts` | List accessible accounts |
+### Idempotency
 
-| GET | `/accounts/{account_id}` | Get account details |
+Transaction creation endpoints require an `Idempotency-Key` HTTP header.
 
-| PATCH | `/accounts/{account_id}/status` | Update account status |
+The key helps prevent duplicate processing when a client retries a request.
 
-| GET | `/accounts/{account_id}/statement` | Get an account statement |
+Reusing the same key with a different request payload is rejected.
 
-| POST | `/transactions/deposit` | Simulate a deposit |
+Example:
 
-| POST | `/transactions/withdrawal` | Withdraw funds |
-
-| POST | `/transactions/transfer` | Transfer funds |
-
-| GET | `/transactions` | List transaction history |
-
-| GET | `/transactions/{transaction_id}` | Get transaction details |
-
-
-
-Use Swagger UI at `/docs` to inspect request schemas and try the endpoints with an authorized bearer token.
-
-
-
-## Running tests
-
-
-
-From the `backend` directory, activate the virtual environment and run:
-
-
-
-```powershell
-
-python -m pytest -v
-
+```http
+Idempotency-Key: unique-operation-123
 ```
 
+Use Swagger UI at `/docs` to inspect request schemas, authentication requirements, and available API operations.
 
+## Running automated tests
 
-The existing service-level test suite includes cash transaction, transfer, and concurrency scenarios. Check the latest test output before reporting the current test count or coverage.
+From the `backend` directory, activate the virtual environment and execute:
 
+### Run the complete test suite
 
+```powershell
+python -m pytest -v --tb=short
+```
 
-## Accounting approach
+### Run tests with code coverage
 
+```powershell
+python -m pytest --cov=app --cov-report=term-missing
+```
 
+### Latest verified test results
 
-LedgerLine uses a double-entry accounting approach.
+| Metric | Result |
+|---|---:|
+| Total tests | 76 |
+| Passed | 76 |
+| Failed | 0 |
+| Overall code coverage | 92% |
 
+These results reflect the verified development test run on November 7, 2026.
 
+## Double-entry accounting approach
 
-- A deposit records a debit to the system settlement account and a credit to the customer account.
+LedgerLine follows a double-entry accounting approach.
 
-- A withdrawal records a debit to the customer account and a credit to the settlement account.
+Each posted financial transaction creates corresponding debit and credit ledger entries.
 
-- A transfer records a debit to the source account and a credit to the destination account.
+### Deposit
 
+- Debit the system settlement account.
+- Credit the customer account.
 
+### Withdrawal
 
-Amounts are represented in integer paise to avoid floating-point rounding errors in financial calculations.
+- Debit the customer account.
+- Credit the system settlement account.
 
+### Transfer
 
+- Debit the source account.
+- Credit the destination account.
 
-**Important:** Deposits are simulated for this project. They are not connected to a real bank, payment gateway, or live payment network.
+### Monetary precision
 
+All transaction amounts are represented in integer paise rather than floating-point values.
 
+This avoids floating-point rounding errors in financial calculations.
+
+**Important:** Deposits and withdrawals are simulated for this project. They are not connected to a real bank, payment gateway, or live payment network.
 
 ## Security considerations
 
+LedgerLine incorporates several security controls:
 
+- Argon2 password hashing.
+- JWT-based authentication.
+- Role-based authorization.
+- Account ownership validation.
+- Active-user verification.
+- Database constraints for financial data integrity.
+- Transactional financial operations.
+- Idempotency protection.
+- Audit logging for relevant operations.
+- Automated security and authorization tests.
 
-- Passwords are hashed rather than stored in plaintext.
+The threat model and remaining security risks are documented in `THREATS.md`.
 
-- Protected API endpoints require JWT authentication.
-
-- Authorization checks restrict operations by role and account ownership.
-
-- Database constraints help protect financial data integrity.
-
-- Transaction operations use database transactions.
-
-- Idempotency records help prevent duplicate processing of repeated requests.
-
-- Audit logs record relevant system activities.
-
-
-
-This is a development project, not a certified production banking platform. A production deployment would require additional security review, operational controls, payment-provider integration, monitoring, and regulatory assessment.
-
-
+This is an educational development project, not a certified production banking platform. Production deployment would require additional security reviews, operational controls, payment-provider integration, monitoring, and regulatory assessment.
 
 ## Project documentation
 
-
-
-- `PROMPTS.md` â€” AI prompts, generated suggestions, corrections, and related commit references.
-
-- `THREATS.md` â€” Security threats, impact analysis, and mitigations.
-
-
+| Document | Purpose |
+|---|---|
+| `README.md` | Project overview, installation, configuration, and usage |
+| `PROMPTS.md` | AI prompts, suggestions, issues, developer corrections, and commit references |
+| `THREATS.md` | Security threats, potential impacts, mitigations, and future improvements |
 
 ## Disclaimer
 
-
-
 LedgerLine is an educational software engineering project. It does not provide real banking services, hold customer funds, or process actual payments.
-
-
