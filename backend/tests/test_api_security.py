@@ -1,4 +1,5 @@
-﻿import uuid
+﻿
+import uuid
 
 import pytest
 from sqlalchemy import select
@@ -391,8 +392,6 @@ def test_customer_history_does_not_expose_other_customers_transactions(
     assert response.json()["items"] == []
 
 
-
-
 # ---------------------------------------------------------
 # AUDITOR AND ACCOUNT STATUS SECURITY
 # ---------------------------------------------------------
@@ -581,3 +580,47 @@ def test_admin_cannot_reopen_closed_account(
     )
     assert len(recorded_events) == 1
     assert recorded_events[0]["outcome"] == "REJECTED"
+
+
+# ---------------------------------------------------------
+# MISSING ACCOUNT STATUS SECURITY
+# ---------------------------------------------------------
+
+
+def test_admin_status_change_for_missing_account_is_audited(
+    client,
+    admin,
+    monkeypatch,
+):
+    recorded_events = []
+    missing_account_id = uuid.uuid4()
+
+    def fake_record_audit_event(**kwargs):
+        recorded_events.append(kwargs)
+
+    # change_account_status calls record_audit_event from account_service.
+    monkeypatch.setattr(
+        "app.services.account_service.record_audit_event",
+        fake_record_audit_event,
+    )
+
+    response = client.patch(
+        f"/api/v1/accounts/{missing_account_id}/status",
+        headers=create_auth_headers(admin),
+        json={"status": "FROZEN"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Account not found."
+
+    assert len(recorded_events) == 1
+
+    event = recorded_events[0]
+
+    assert event["actor_id"] == admin.id
+    assert event["action"] == "ACCOUNT_STATUS_CHANGE"
+    assert event["resource_type"] == "ACCOUNT"
+    assert event["resource_id"] == str(missing_account_id)
+    assert event["outcome"] == "REJECTED"
+    assert event["details"]["requested_status"] == "FROZEN"
+    assert event["details"]["reason"] == "Account not found"
