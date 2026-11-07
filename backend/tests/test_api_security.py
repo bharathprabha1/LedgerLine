@@ -1,12 +1,14 @@
 ﻿import uuid
 
 import pytest
+from sqlalchemy import select
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models.account import Account
+from app.models.audit_log import AuditLog
 from app.models.enums import (
     AccountStatus,
     TransactionStatus,
@@ -388,3 +390,194 @@ def test_customer_history_does_not_expose_other_customers_transactions(
     assert response.json()["total"] == 0
     assert response.json()["items"] == []
 
+
+
+
+# ---------------------------------------------------------
+# AUDITOR AND ACCOUNT STATUS SECURITY
+# ---------------------------------------------------------
+
+
+@pytest.fixture
+def auditor(db):
+    return create_test_user(db, role=UserRole.AUDITOR)
+
+
+def test_auditor_can_view_accounts(
+    client,
+    auditor,
+    transfer_accounts,
+):
+    response = client.get(
+        "/api/v1/accounts",
+        headers=create_auth_headers(auditor),
+    )
+
+    assert response.status_code == 200
+
+    returned_ids = {
+        item["id"] for item in response.json()
+    }
+
+    assert str(transfer_accounts["source"].id) in returned_ids
+    assert str(transfer_accounts["destination"].id) in returned_ids
+
+
+def test_auditor_cannot_change_account_status(
+    client,
+    auditor,
+    customer_account,
+    monkeypatch,
+):
+    recorded_events = []
+
+    def fake_record_audit_event(**kwargs):
+        recorded_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.api.v1.accounts.record_audit_event",
+        fake_record_audit_event,
+    )
+
+    response = client.patch(
+        f"/api/v1/accounts/{customer_account.id}/status",
+        headers=create_auth_headers(auditor),
+        json={"status": "FROZEN"},
+    )
+
+    assert response.status_code == 403
+    assert len(recorded_events) == 1
+    assert recorded_events[0]["actor_id"] == auditor.id
+    assert recorded_events[0]["outcome"] == "DENIED"
+
+
+def test_admin_can_freeze_active_account_and_audit_success(
+    client,
+    db,
+    admin,
+    customer_account,
+):
+    response = client.patch(
+        f"/api/v1/accounts/{customer_account.id}/status",
+        headers=create_auth_headers(admin),
+        json={"status": "FROZEN"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "FROZEN"
+
+    audit_event = db.scalar(
+        select(AuditLog).where(
+            AuditLog.actor_id == admin.id,
+            AuditLog.action == "ACCOUNT_STATUS_CHANGE",
+            AuditLog.resource_id == str(customer_account.id),
+            AuditLog.outcome == "SUCCESS",
+        )
+    )
+
+    assert audit_event is not None
+    assert audit_event.details["previous_status"] == "ACTIVE"
+    assert audit_event.details["new_status"] == "FROZEN"
+
+
+def test_admin_cannot_change_system_account_status(
+    client,
+    admin,
+    db,
+    monkeypatch,
+):
+    system_account = Account(
+        account_number=f"LLSYS{uuid.uuid4().hex[:12]}",
+        owner_id=admin.id,
+        balance_paise=0,
+        currency="INR",
+        status=AccountStatus.ACTIVE,
+        is_system=True,
+    )
+
+    db.add(system_account)
+    db.flush()
+
+    recorded_events = []
+
+    def fake_record_audit_event(**kwargs):
+        recorded_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.api.v1.accounts.record_audit_event",
+        fake_record_audit_event,
+    )
+
+    response = client.patch(
+        f"/api/v1/accounts/{system_account.id}/status",
+        headers=create_auth_headers(admin),
+        json={"status": "FROZEN"},
+    )
+
+    assert response.status_code == 409
+    assert len(recorded_events) == 1
+    assert recorded_events[0]["outcome"] == "REJECTED"
+
+
+def test_admin_cannot_close_account_with_nonzero_balance(
+    client,
+    admin,
+    customer_account,
+    monkeypatch,
+):
+    customer_account.balance_paise = 5000
+
+    recorded_events = []
+
+    def fake_record_audit_event(**kwargs):
+        recorded_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.account_service.record_audit_event",
+        fake_record_audit_event,
+    )
+
+    response = client.patch(
+        f"/api/v1/accounts/{customer_account.id}/status",
+        headers=create_auth_headers(admin),
+        json={"status": "CLOSED"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "An account with a non-zero balance cannot be closed."
+    )
+    assert len(recorded_events) == 1
+    assert recorded_events[0]["outcome"] == "REJECTED"
+
+
+def test_admin_cannot_reopen_closed_account(
+    client,
+    admin,
+    customer_account,
+    monkeypatch,
+):
+    customer_account.status = AccountStatus.CLOSED
+
+    recorded_events = []
+
+    def fake_record_audit_event(**kwargs):
+        recorded_events.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.account_service.record_audit_event",
+        fake_record_audit_event,
+    )
+
+    response = client.patch(
+        f"/api/v1/accounts/{customer_account.id}/status",
+        headers=create_auth_headers(admin),
+        json={"status": "ACTIVE"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Requested account status transition is not allowed."
+    )
+    assert len(recorded_events) == 1
+    assert recorded_events[0]["outcome"] == "REJECTED"
