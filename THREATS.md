@@ -86,8 +86,9 @@ The goal is to identify possible attacks, understand their impact, and document 
 - Database constraints help prevent invalid balances.
 - A concurrency test verifies that simultaneous transfers with different idempotency keys cannot overdraw the source account.
 - A separate concurrency test verifies that simultaneous requests using the same idempotency key process a transfer only once.
+- A concurrent withdrawal test verifies that simultaneous withdrawals cannot overdraw the customer or settlement account, and that the successful and rejected attempts are recorded correctly.
 
-**Remaining risk:** The current tests cover specific concurrent transfer scenarios, not production-scale stress conditions. Production workloads require additional concurrency testing, operational monitoring, and review of database locking behavior. Concurrent withdrawal scenarios should also receive dedicated testing.
+**Remaining risk:** The current tests cover specific concurrent transfer and withdrawal scenarios, not production-scale stress conditions. Production workloads require additional concurrency testing, operational monitoring, and review of database locking behavior.
 
 ### T5 - Duplicate Transaction Requests
 
@@ -211,7 +212,7 @@ The following checks are covered by the current automated test suite:
 Additional checks to implement or expand:
 
 - [ ] Frozen and closed account restrictions are tested across all applicable financial operations.
-- [ ] Concurrent withdrawals are tested for overdraw prevention.
+- [x] Concurrent withdrawals cannot overdraw the customer or settlement account in the tested scenario.
 - [ ] Concurrent duplicate deposits and withdrawals receive dedicated tests.
 - [ ] Audit events are verified for all relevant sensitive operations.
 - [ ] Additional tests verify account lifecycle and role-management security.
@@ -241,10 +242,10 @@ LedgerLine is an educational development project. Deposits are simulated, and th
 
 The mitigations listed above describe the current design where implemented. Items identified as remaining risks or future improvements must not be treated as completed security controls.
 
-The current automated backend test suite contains 84 passing tests as of November 8, 2026. The latest full test run completed with no failures.
+The current automated backend test suite contains 85 passing tests as of November 8, 2026. The latest full test run completed with no failures.
 
 Overall code coverage was previously reported as 92%. Coverage has not yet been remeasured after adding the latest concurrency test.
 
-The concurrent duplicate-transfer test verifies two simultaneous requests against the PostgreSQL test database. It does not establish production-scale concurrency or distributed multi-instance guarantees.
+The concurrent transfer, duplicate-transfer, and withdrawal tests verify simultaneous requests against the PostgreSQL test database. They do not establish production-scale concurrency or distributed multi-instance guarantees.
 
 A production banking platform would require independent security, compliance, infrastructure, and operational reviews.
