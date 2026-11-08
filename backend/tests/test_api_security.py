@@ -773,3 +773,126 @@ def test_auditor_cannot_initiate_financial_transactions(
     )
 
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------
+# RECIPIENT LOOKUP RATE-LIMIT API SECURITY TESTS
+# ---------------------------------------------------------
+
+
+def test_account_holder_can_lookup_eligible_recipient(
+    client,
+    db,
+    customer,
+):
+    recipient = create_test_user(db)
+
+    recipient_account = Account(
+        account_number=f"LLTEST{uuid.uuid4().hex[:12]}",
+        owner_id=recipient.id,
+        balance_paise=50000,
+        currency="INR",
+        status=AccountStatus.ACTIVE,
+        is_system=False,
+    )
+
+    db.add(recipient_account)
+    db.flush()
+
+    response = client.get(
+        "/api/v1/accounts/recipient-lookup",
+        params={"account_number": recipient_account.account_number},
+        headers=create_auth_headers(customer),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["account_number"] == recipient_account.account_number
+    assert response.json()["holder_name"] == recipient.full_name
+    assert "balance_paise" not in response.json()
+
+
+def test_unknown_recipient_lookups_are_rate_limited(
+    client,
+    customer,
+):
+    headers = create_auth_headers(customer)
+
+    for _ in range(10):
+        response = client.get(
+            "/api/v1/accounts/recipient-lookup",
+            params={"account_number": "LLUNKNOWN000001"},
+            headers=headers,
+        )
+
+        assert response.status_code == 404
+
+    response = client.get(
+        "/api/v1/accounts/recipient-lookup",
+        params={"account_number": "LLUNKNOWN000002"},
+        headers=headers,
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+
+
+def test_invalid_account_number_attempts_are_rate_limited(
+    client,
+    customer,
+):
+    headers = create_auth_headers(customer)
+
+    for _ in range(10):
+        response = client.get(
+            "/api/v1/accounts/recipient-lookup",
+            params={"account_number": ""},
+            headers=headers,
+        )
+
+        assert response.status_code == 400
+
+    response = client.get(
+        "/api/v1/accounts/recipient-lookup",
+        params={"account_number": ""},
+        headers=headers,
+    )
+
+    assert response.status_code == 429
+
+
+def test_recipient_lookup_limits_are_independent_per_user(
+    client,
+    db,
+    customer,
+):
+    second_customer = create_test_user(db)
+
+    first_headers = create_auth_headers(customer)
+    second_headers = create_auth_headers(second_customer)
+
+    for _ in range(10):
+        response = client.get(
+            "/api/v1/accounts/recipient-lookup",
+            params={"account_number": "LLUNKNOWN000003"},
+            headers=first_headers,
+        )
+
+        assert response.status_code == 404
+
+    # A second customer has an independent rate-limit counter.
+    second_response = client.get(
+        "/api/v1/accounts/recipient-lookup",
+        params={"account_number": "LLUNKNOWN000004"},
+        headers=second_headers,
+    )
+
+    assert second_response.status_code == 404
+
+    # The first customer is now rate-limited.
+    first_response = client.get(
+        "/api/v1/accounts/recipient-lookup",
+        params={"account_number": "LLUNKNOWN000005"},
+        headers=first_headers,
+    )
+
+    assert first_response.status_code == 429

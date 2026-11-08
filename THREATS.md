@@ -1,4 +1,3 @@
-
 # LedgerLine - Threat Model
 
 ## 1. Purpose
@@ -184,8 +183,28 @@ An attacker may also attempt to reuse an idempotency key with a modified transac
 
 - Transaction history endpoints support pagination.
 - Database connection pooling is configured.
+- Recipient account lookup has a database-backed per-user rate limit, documented separately under T11.
 
-**Remaining risk:** Production deployment should add rate limiting, request-size limits, timeouts, monitoring, and infrastructure-level protections.
+**Remaining risk:** Production deployment should add application-wide rate limiting, request-size limits, timeouts, monitoring, and infrastructure-level protections.
+
+### T11 - Recipient Account Enumeration and Excessive Lookup Attempts
+
+**Threat:** An authenticated account holder may repeatedly submit account numbers to discover whether other customers have accounts on LedgerLine. This could expose recipient information or enable account enumeration.
+
+**Potential impact:** Unauthorized discovery of customer account information, privacy violations, and excessive database requests.
+
+**Mitigations:**
+
+- Recipient lookup is restricted to authenticated account holders.
+- Only active, non-system customer accounts with eligible account holders can be returned.
+- Unknown, inactive, and ineligible recipients are not returned as valid transfer recipients.
+- Customers cannot use recipient lookup to select their own account.
+- A database-backed rate limiter allows a maximum of 10 lookup attempts per user within a 60-second window.
+- The rate limiter uses an atomic PostgreSQL upsert to enforce the limit safely during concurrent database updates.
+- Excessive attempts receive HTTP 429 Too Many Requests with a Retry-After response header.
+- Automated service and API tests verify the lookup limit, rejected attempts, and independent limits for different users.
+
+**Remaining risk:** Concurrent recipient lookup requests have not yet received a dedicated concurrency test. The current implementation has not been validated under production-scale or distributed deployment conditions. Account enumeration resistance should be reviewed alongside other privacy controls before production use.
 
 ## 4. Security Testing Plan
 
@@ -208,22 +227,27 @@ The following checks are covered by the current automated test suite:
 - [x] Concurrent duplicate transfer requests create only one successful audit event.
 - [x] Selected account status changes generate the expected audit events.
 - [x] Failed transfer requests are verified to leave no partial ledger entries in the tested scenario.
+- [x] Concurrent withdrawals cannot overdraw the customer or settlement account in the tested scenario.
+- [x] Recipient lookup returns eligible recipients in the tested scenario.
+- [x] Recipient lookup rejects unknown and invalid account-number attempts in the tested scenarios.
+- [x] Recipient lookup rate limiting rejects excessive attempts with HTTP 429.
+- [x] Recipient lookup limits are independent for different users.
+- [x] Recipient lookup rate-limit service tests verify the 10-attempt, 60-second limit.
 
 Additional checks to implement or expand:
 
 - [ ] Frozen and closed account restrictions are tested across all applicable financial operations.
-- [x] Concurrent withdrawals cannot overdraw the customer or settlement account in the tested scenario.
 - [ ] Concurrent duplicate deposits and withdrawals receive dedicated tests.
 - [ ] Audit events are verified for all relevant sensitive operations.
 - [ ] Additional tests verify account lifecycle and role-management security.
-- [ ] Recipient account lookup is tested against enumeration and excessive requests.
+- [ ] Concurrent recipient lookup requests are tested against rate-limit bypass.
 - [ ] Production-scale concurrency and multi-instance idempotency behavior are tested.
 
 ## 5. Future Security Improvements
 
 Before production use, consider:
 
-1. Rate limiting and brute-force protection.
+1. Expand rate limiting and brute-force protection to authentication and other sensitive endpoints.
 2. Refresh-token rotation and token revocation.
 3. Multi-factor authentication for privileged users.
 4. Independent and tamper-resistant audit-log storage.
@@ -235,6 +259,7 @@ Before production use, consider:
 10. Payment-provider integration with verified settlement callbacks.
 11. Idempotency-record retention and cleanup policies.
 12. Production-scale concurrency and multi-instance testing.
+13. Dedicated concurrent recipient lookup testing and rate-limit validation.
 
 ## 6. Scope and Limitations
 
@@ -242,10 +267,12 @@ LedgerLine is an educational development project. Deposits are simulated, and th
 
 The mitigations listed above describe the current design where implemented. Items identified as remaining risks or future improvements must not be treated as completed security controls.
 
-The current automated backend test suite contains 85 passing tests as of November 8, 2026. The latest full test run completed with no failures.
+The current automated backend test suite contains 93 passing tests as of November 9, 2026. The latest full test run completed with no failures. One Starlette deprecation warning was reported by the test environment.
 
-Overall code coverage was previously reported as 92%. Coverage has not yet been remeasured after adding the latest concurrency test.
+Overall code coverage was previously reported as 92%. Coverage has not yet been remeasured after adding the latest concurrency and recipient lookup security tests.
 
 The concurrent transfer, duplicate-transfer, and withdrawal tests verify simultaneous requests against the PostgreSQL test database. They do not establish production-scale concurrency or distributed multi-instance guarantees.
+
+Recipient lookup rate-limit tests verify the configured per-user limit and API rejection behavior. Concurrent recipient lookup requests have not yet received a dedicated concurrency test.
 
 A production banking platform would require independent security, compliance, infrastructure, and operational reviews.

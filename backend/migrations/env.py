@@ -1,7 +1,8 @@
-from logging.config import fileConfig
+﻿from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import make_url
 
 from app.core.config import settings
 from app.db.base import Base
@@ -12,18 +13,31 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+
+def get_database_url() -> str:
+    url = make_url(settings.database_url)
+
+    x_args = context.get_x_argument(as_dictionary=True)
+
+    if x_args.get("test_db", "").lower() == "true":
+        url = url.set(database="ledgerline_test_db")
+
+    return url.render_as_string(hide_password=False)
+
+
+database_url = get_database_url()
+
 config.set_main_option(
     "sqlalchemy.url",
-    settings.database_url.replace("%", "%%"),
+    database_url.replace("%", "%%"),
 )
 
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = settings.database_url
     context.configure(
-        url=url,
+        url=database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

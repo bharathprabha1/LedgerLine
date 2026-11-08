@@ -22,6 +22,9 @@ from app.services.account_service import (
     create_account,
     record_audit_event,
 )
+from app.services.recipient_lookup_service import (
+    enforce_recipient_lookup_limit,
+)
 from app.services.statement_service import get_account_statement
 
 
@@ -163,10 +166,15 @@ def lookup_transfer_recipient(
     Look up an eligible transfer recipient using an exact
     account number.
 
-    Only authenticated account holders can use this endpoint.
-    Recipient balances and private information are not exposed.
+    Security:
+    - Requires authenticated account holder.
+    - Enforces 10 lookups per 60-second window.
+    - Counts successful and unsuccessful lookups.
+    - Excludes system and inactive accounts.
+    - Does not expose recipient balances or private information.
     """
 
+    # Only authenticated account holders can use this endpoint.
     if current_user.role != UserRole.ACCOUNT_HOLDER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -175,6 +183,12 @@ def lookup_transfer_recipient(
                 "transfer recipients."
             ),
         )
+
+    # Apply rate limiting before processing the account number.
+    enforce_recipient_lookup_limit(
+        db=db,
+        user_id=current_user.id,
+    )
 
     normalized_number = account_number.strip()
 
