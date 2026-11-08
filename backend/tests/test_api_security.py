@@ -624,3 +624,152 @@ def test_admin_status_change_for_missing_account_is_audited(
     assert event["outcome"] == "REJECTED"
     assert event["details"]["requested_status"] == "FROZEN"
     assert event["details"]["reason"] == "Account not found"
+
+
+# ---------------------------------------------------------
+# ADDITIONAL AUDITOR AUTHORIZATION TESTS
+# ---------------------------------------------------------
+
+
+def create_auditor_test_transaction(db, transfer_accounts):
+    """Create a posted transaction for auditor read-access tests."""
+
+    transaction = LedgerTransaction(
+        reference=f"AUDIT-{uuid.uuid4().hex}",
+        transaction_type=TransactionType.TRANSFER,
+        status=TransactionStatus.POSTED,
+        amount_paise=5000,
+        source_account_id=transfer_accounts["source"].id,
+        destination_account_id=transfer_accounts["destination"].id,
+        initiated_by=transfer_accounts["source_owner"].id,
+        description="Auditor authorization test",
+    )
+
+    db.add(transaction)
+    db.flush()
+
+    return transaction
+
+
+def test_auditor_can_view_transaction_history(
+    client,
+    db,
+    auditor,
+    transfer_accounts,
+):
+    transaction = create_auditor_test_transaction(
+        db, transfer_accounts
+    )
+
+    response = client.get(
+        "/api/v1/transactions",
+        headers=create_auth_headers(auditor),
+    )
+
+    assert response.status_code == 200
+    assert str(transaction.id) in str(response.json())
+
+
+def test_auditor_can_view_transaction_details(
+    client,
+    db,
+    auditor,
+    transfer_accounts,
+):
+    transaction = create_auditor_test_transaction(
+        db, transfer_accounts
+    )
+
+    response = client.get(
+        f"/api/v1/transactions/{transaction.id}",
+        headers=create_auth_headers(auditor),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(transaction.id)
+
+
+def test_auditor_can_view_customer_account_statement(
+    client,
+    db,
+    auditor,
+    transfer_accounts,
+):
+    create_auditor_test_transaction(db, transfer_accounts)
+    account = transfer_accounts["source"]
+
+    response = client.get(
+        f"/api/v1/accounts/{account.id}/statement",
+        headers=create_auth_headers(auditor),
+    )
+
+    assert response.status_code == 200
+
+
+def test_auditor_cannot_create_account(
+    client,
+    auditor,
+    transfer_accounts,
+):
+    response = client.post(
+        "/api/v1/accounts",
+        headers=create_auth_headers(auditor),
+        json={
+            "owner_id": str(
+                transfer_accounts["source_owner"].id
+            )
+        },
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "payload_factory"),
+    [
+        (
+            "/api/v1/transactions/deposit",
+            lambda accounts: {
+                "account_id": str(accounts["source"].id),
+                "amount_paise": 1000,
+                "description": "Auditor deposit denial test",
+            },
+        ),
+        (
+            "/api/v1/transactions/withdrawal",
+            lambda accounts: {
+                "account_id": str(accounts["source"].id),
+                "amount_paise": 1000,
+                "description": "Auditor withdrawal denial test",
+            },
+        ),
+        (
+            "/api/v1/transactions/transfer",
+            lambda accounts: {
+                "source_account_id": str(accounts["source"].id),
+                "destination_account_id": str(
+                    accounts["destination"].id
+                ),
+                "amount_paise": 1000,
+                "description": "Auditor transfer denial test",
+            },
+        ),
+    ],
+)
+def test_auditor_cannot_initiate_financial_transactions(
+    client,
+    auditor,
+    transfer_accounts,
+    endpoint,
+    payload_factory,
+):
+    response = client.post(
+        endpoint,
+        headers={
+            **create_auth_headers(auditor),
+            "Idempotency-Key": str(uuid.uuid4()),
+        },
+        json=payload_factory(transfer_accounts),
+    )
+
+    assert response.status_code == 403

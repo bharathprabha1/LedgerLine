@@ -65,6 +65,9 @@ The goal is to identify possible attacks, understand their impact, and document 
 - Public registration creates account-holder users only.
 - Administrator-only endpoints use role checks.
 - Customer attempts to perform restricted account-management operations are tested.
+- Auditors have read-only access to accounts, statements, transaction history, and transaction details.
+- Auditors cannot create accounts, change account status, or initiate deposits, withdrawals, or transfers.
+- Automated API tests verify the auditor's read-only permissions and denied operations.
 
 **Remaining risk:** Administrator account compromise and unsafe future role-management features require additional controls. Administrator provisioning and role changes should use a restricted, audited process.
 
@@ -191,6 +194,9 @@ The following checks are covered by the current automated test suite:
 - [x] Account holders cannot access another customer's account.
 - [x] Account holders cannot access another customer's transactions.
 - [x] Customers cannot perform administrator-only operations.
+- [x] Auditors can view accounts, transaction history, transaction details, and customer account statements.
+- [x] Auditors cannot create accounts or change account status.
+- [x] Auditors cannot initiate deposits, withdrawals, or transfers.
 - [x] Inactive users cannot use protected endpoints.
 - [x] Repeated idempotency keys do not create duplicate transactions.
 - [x] Reusing an idempotency key with a different payload is rejected.
@@ -235,7 +241,7 @@ LedgerLine is an educational development project. Deposits are simulated, and th
 
 The mitigations listed above describe the current design where implemented. Items identified as remaining risks or future improvements must not be treated as completed security controls.
 
-The current automated backend test suite contains 77 passing tests as of November 8, 2026. The latest full test run completed with no failures.
+The current automated backend test suite contains 84 passing tests as of November 8, 2026. The latest full test run completed with no failures.
 
 Overall code coverage was previously reported as 92%. Coverage has not yet been remeasured after adding the latest concurrency test.
 
