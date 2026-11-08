@@ -1,3 +1,4 @@
+
 # LedgerLine - Threat Model
 
 ## 1. Purpose
@@ -49,6 +50,7 @@ The goal is to identify possible attacks, understand their impact, and document 
 - Administrative operations use role-based authorization.
 - System settlement accounts are protected from ordinary customer access.
 - Negative API tests verify that customers cannot access another customer's account, transaction, or statement.
+- Transfer operations validate ownership of the source account and eligibility of the destination account.
 
 **Remaining risk:** Every new endpoint that accepts a resource identifier must receive an authorization review and dedicated negative tests.
 
@@ -76,26 +78,36 @@ The goal is to identify possible attacks, understand their impact, and document 
 
 - Financial operations use database transactions.
 - Account balance changes and ledger records are handled together.
+- Account rows are locked during financial operations.
+- Account locks are acquired in a deterministic order for transfer operations.
 - Database constraints help prevent invalid balances.
-- A concurrency test verifies that simultaneous transfers cannot overdraw the source account.
+- A concurrency test verifies that simultaneous transfers with different idempotency keys cannot overdraw the source account.
+- A separate concurrency test verifies that simultaneous requests using the same idempotency key process a transfer only once.
 
-**Remaining risk:** Production workloads require additional concurrency testing, operational monitoring, and review of database locking behavior. Concurrent withdrawal scenarios should also receive dedicated testing.
+**Remaining risk:** The current tests cover specific concurrent transfer scenarios, not production-scale stress conditions. Production workloads require additional concurrency testing, operational monitoring, and review of database locking behavior. Concurrent withdrawal scenarios should also receive dedicated testing.
 
 ### T5 - Duplicate Transaction Requests
 
 **Threat:** A client may retry a request because of a timeout or network failure, unintentionally submitting the same financial operation more than once.
 
-**Potential impact:** Duplicate deposits, withdrawals, or transfers.
+An attacker may also attempt to reuse an idempotency key with a modified transaction payload.
+
+**Potential impact:** Duplicate deposits, withdrawals, or transfers, or inconsistent transaction responses.
 
 **Mitigations:**
 
-- Idempotency keys are supported for transaction requests.
+- Idempotency keys are supported for financial transaction requests.
 - Idempotency records are associated with the requesting user and endpoint.
 - Request hashes help detect reuse of a key with a different payload.
-- Automated tests verify repeated requests and reject reuse of a key with a different payload.
+- Repeated requests with the same key and payload return the existing transaction response.
+- Reusing a key with a different payload is rejected.
+- Automated tests verify successful transfer replay.
+- Automated tests verify rejected transfer replay.
+- Deposit and withdrawal idempotency tests verify repeated requests.
+- Concurrent duplicate-transfer testing verifies that two simultaneous requests with the same key create only one transaction, one pair of ledger entries, and one successful audit event.
 - Transaction API tests validate missing, empty, and oversized idempotency keys.
 
-**Remaining risk:** Idempotency retention, cleanup, and retry behavior need further operational testing.
+**Remaining risk:** Idempotency retention, cleanup, and retry behavior need further operational testing. Distributed deployments should also verify idempotency behavior across application instances.
 
 ### T6 - SQL Injection
 
@@ -123,6 +135,8 @@ The goal is to identify possible attacks, understand their impact, and document 
 - Audit records include actor, action, resource, outcome, and timestamp information.
 - Account status changes include successful and rejected operation audit events.
 - Automated tests verify selected account status audit scenarios.
+- Transfer tests verify successful and rejected transaction audit events.
+- Concurrent duplicate-transfer testing verifies that only one successful transfer audit event is generated.
 
 **Remaining risk:** The current application database is not an independently protected audit store. Production deployment should use restricted write permissions, centralized logging, retention policies, and tamper detection.
 
@@ -180,16 +194,23 @@ The following checks are covered by the current automated test suite:
 - [x] Inactive users cannot use protected endpoints.
 - [x] Repeated idempotency keys do not create duplicate transactions.
 - [x] Reusing an idempotency key with a different payload is rejected.
+- [x] Rejected transaction requests are replayed consistently in tested scenarios.
 - [x] Concurrent transfers cannot produce an invalid negative source balance.
+- [x] Concurrent duplicate transfer requests create only one financial transaction.
+- [x] Concurrent duplicate transfer requests create only one pair of ledger entries.
+- [x] Concurrent duplicate transfer requests create only one successful audit event.
 - [x] Selected account status changes generate the expected audit events.
+- [x] Failed transfer requests are verified to leave no partial ledger entries in the tested scenario.
 
 Additional checks to implement or expand:
 
 - [ ] Frozen and closed account restrictions are tested across all applicable financial operations.
 - [ ] Concurrent withdrawals are tested for overdraw prevention.
-- [ ] Failed transactions are verified to leave no partial ledger entries.
+- [ ] Concurrent duplicate deposits and withdrawals receive dedicated tests.
 - [ ] Audit events are verified for all relevant sensitive operations.
 - [ ] Additional tests verify account lifecycle and role-management security.
+- [ ] Recipient account lookup is tested against enumeration and excessive requests.
+- [ ] Production-scale concurrency and multi-instance idempotency behavior are tested.
 
 ## 5. Future Security Improvements
 
@@ -205,6 +226,8 @@ Before production use, consider:
 8. Database backup and recovery testing.
 9. External penetration testing.
 10. Payment-provider integration with verified settlement callbacks.
+11. Idempotency-record retention and cleanup policies.
+12. Production-scale concurrency and multi-instance testing.
 
 ## 6. Scope and Limitations
 
@@ -212,6 +235,10 @@ LedgerLine is an educational development project. Deposits are simulated, and th
 
 The mitigations listed above describe the current design where implemented. Items identified as remaining risks or future improvements must not be treated as completed security controls.
 
-The current automated backend test suite contains 76 passing tests with 92% overall code coverage at the time of this document update.
+The current automated backend test suite contains 77 passing tests as of November 8, 2026. The latest full test run completed with no failures.
+
+Overall code coverage was previously reported as 92%. Coverage has not yet been remeasured after adding the latest concurrency test.
+
+The concurrent duplicate-transfer test verifies two simultaneous requests against the PostgreSQL test database. It does not establish production-scale concurrency or distributed multi-instance guarantees.
 
 A production banking platform would require independent security, compliance, infrastructure, and operational reviews.

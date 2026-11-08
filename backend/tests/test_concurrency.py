@@ -16,21 +16,77 @@ from app.models.user import User
 from app.services.transaction_service import transfer_funds
 
 
-def test_concurrent_transfers_cannot_overdraw(test_engine):
-    suffix = uuid.uuid4().hex[:12]
+def cleanup_test_records(
+    SessionFactory,
+    source_owner_id,
+    destination_owner_id,
+    source_account_id,
+    destination_account_id,
+):
+    """Remove only records created by an individual concurrency test."""
 
-    SessionFactory = sessionmaker(
-        bind=test_engine,
-        autoflush=False,
-        expire_on_commit=False,
-    )
+    with SessionFactory() as cleanup_db:
+        transaction_ids = select(
+            LedgerTransaction.id
+        ).where(
+            LedgerTransaction.initiated_by == source_owner_id
+        )
 
-    source_owner_id = uuid.uuid4()
-    destination_owner_id = uuid.uuid4()
-    source_account_id = uuid.uuid4()
-    destination_account_id = uuid.uuid4()
+        cleanup_db.execute(
+            delete(LedgerEntry).where(
+                LedgerEntry.transaction_id.in_(transaction_ids)
+            )
+        )
 
-    # Create committed records visible to both worker sessions.
+        cleanup_db.execute(
+            delete(IdempotencyRecord).where(
+                IdempotencyRecord.user_id == source_owner_id
+            )
+        )
+
+        cleanup_db.execute(
+            delete(AuditLog).where(
+                AuditLog.actor_id == source_owner_id
+            )
+        )
+
+        cleanup_db.execute(
+            delete(LedgerTransaction).where(
+                LedgerTransaction.initiated_by == source_owner_id
+            )
+        )
+
+        cleanup_db.execute(
+            delete(Account).where(
+                Account.id.in_([
+                    source_account_id,
+                    destination_account_id,
+                ])
+            )
+        )
+
+        cleanup_db.execute(
+            delete(User).where(
+                User.id.in_([
+                    source_owner_id,
+                    destination_owner_id,
+                ])
+            )
+        )
+
+        cleanup_db.commit()
+
+
+def create_concurrency_test_accounts(
+    SessionFactory,
+    suffix,
+    source_owner_id,
+    destination_owner_id,
+    source_account_id,
+    destination_account_id,
+):
+    """Create isolated, committed accounts for concurrency tests."""
+
     with SessionFactory() as setup_db:
         source_owner = User(
             id=source_owner_id,
@@ -70,19 +126,42 @@ def test_concurrent_transfers_cannot_overdraw(test_engine):
             is_system=False,
         )
 
-        # Insert users first to satisfy account foreign keys.
         setup_db.add_all([
             source_owner,
             destination_owner,
         ])
         setup_db.flush()
 
-        # Now insert accounts referencing the existing users.
         setup_db.add_all([
             source,
             destination,
         ])
+
         setup_db.commit()
+
+
+def test_concurrent_transfers_cannot_overdraw(test_engine):
+    suffix = uuid.uuid4().hex[:12]
+
+    SessionFactory = sessionmaker(
+        bind=test_engine,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    source_owner_id = uuid.uuid4()
+    destination_owner_id = uuid.uuid4()
+    source_account_id = uuid.uuid4()
+    destination_account_id = uuid.uuid4()
+
+    create_concurrency_test_accounts(
+        SessionFactory,
+        suffix,
+        source_owner_id,
+        destination_owner_id,
+        source_account_id,
+        destination_account_id,
+    )
 
     barrier = threading.Barrier(2)
 
@@ -108,6 +187,7 @@ def test_concurrent_transfers_cannot_overdraw(test_engine):
                 perform_transfer,
                 f"concurrent-a-{suffix}",
             )
+
             future_b = executor.submit(
                 perform_transfer,
                 f"concurrent-b-{suffix}",
@@ -173,54 +253,136 @@ def test_concurrent_transfers_cannot_overdraw(test_engine):
             assert len(entries) == 2
 
     finally:
-        # Remove only records created by this test.
-        with SessionFactory() as cleanup_db:
-            transaction_ids = select(
-                LedgerTransaction.id
-            ).where(
-                LedgerTransaction.initiated_by == source_owner_id
+        cleanup_test_records(
+            SessionFactory,
+            source_owner_id,
+            destination_owner_id,
+            source_account_id,
+            destination_account_id,
+        )
+
+
+def test_concurrent_duplicate_transfer_is_processed_once(test_engine):
+    suffix = uuid.uuid4().hex[:12]
+
+    SessionFactory = sessionmaker(
+        bind=test_engine,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    source_owner_id = uuid.uuid4()
+    destination_owner_id = uuid.uuid4()
+    source_account_id = uuid.uuid4()
+    destination_account_id = uuid.uuid4()
+
+    create_concurrency_test_accounts(
+        SessionFactory,
+        suffix,
+        source_owner_id,
+        destination_owner_id,
+        source_account_id,
+        destination_account_id,
+    )
+
+    barrier = threading.Barrier(2)
+    shared_key = f"concurrent-duplicate-{suffix}"
+
+    def perform_transfer():
+        with SessionFactory() as worker_db:
+            user = worker_db.get(User, source_owner_id)
+
+            barrier.wait(timeout=10)
+
+            return transfer_funds(
+                worker_db,
+                current_user=user,
+                source_account_id=source_account_id,
+                destination_account_id=destination_account_id,
+                amount_paise=10_000,
+                description="Concurrent duplicate transfer test",
+                idempotency_key=shared_key,
             )
 
-            cleanup_db.execute(
-                delete(LedgerEntry).where(
-                    LedgerEntry.transaction_id.in_(transaction_ids)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_a = executor.submit(perform_transfer)
+            future_b = executor.submit(perform_transfer)
+
+            result_a = future_a.result(timeout=30)
+            result_b = future_b.result(timeout=30)
+
+        # Both identical requests must succeed.
+        assert result_a.status_code == 201
+        assert result_b.status_code == 201
+
+        # Both requests must return the same transaction.
+        assert result_a.transaction is not None
+        assert result_b.transaction is not None
+
+        assert result_a.transaction.id == result_b.transaction.id
+
+        with SessionFactory() as verify_db:
+            source = verify_db.get(Account, source_account_id)
+            destination = verify_db.get(
+                Account,
+                destination_account_id,
+            )
+
+            # Money must move only once.
+            assert source.balance_paise == 40_000
+            assert destination.balance_paise == 10_000
+
+            transactions = verify_db.scalars(
+                select(LedgerTransaction).where(
+                    LedgerTransaction.source_account_id
+                    == source_account_id
                 )
-            )
+            ).all()
 
-            cleanup_db.execute(
-                delete(IdempotencyRecord).where(
-                    IdempotencyRecord.user_id == source_owner_id
+            assert len(transactions) == 1
+
+            transaction = transactions[0]
+
+            assert transaction.id == result_a.transaction.id
+            assert transaction.status == TransactionStatus.POSTED
+
+            entries = verify_db.scalars(
+                select(LedgerEntry).where(
+                    LedgerEntry.transaction_id == transaction.id
                 )
-            )
+            ).all()
 
-            cleanup_db.execute(
-                delete(AuditLog).where(
-                    AuditLog.actor_id == source_owner_id
+            # Exactly one debit and one credit.
+            assert len(entries) == 2
+            assert sum(
+                entry.amount_paise for entry in entries
+            ) == 20_000
+
+            idempotency_records = verify_db.scalars(
+                select(IdempotencyRecord).where(
+                    IdempotencyRecord.user_id == source_owner_id,
+                    IdempotencyRecord.idempotency_key == shared_key,
                 )
-            )
+            ).all()
 
-            cleanup_db.execute(
-                delete(LedgerTransaction).where(
-                    LedgerTransaction.initiated_by == source_owner_id
+            assert len(idempotency_records) == 1
+
+            success_audits = verify_db.scalars(
+                select(AuditLog).where(
+                    AuditLog.actor_id == source_owner_id,
+                    AuditLog.action == "TRANSFER",
+                    AuditLog.outcome == "SUCCESS",
                 )
-            )
+            ).all()
 
-            cleanup_db.execute(
-                delete(Account).where(
-                    Account.id.in_([
-                        source_account_id,
-                        destination_account_id,
-                    ])
-                )
-            )
+            assert len(success_audits) == 1
 
-            cleanup_db.execute(
-                delete(User).where(
-                    User.id.in_([
-                        source_owner_id,
-                        destination_owner_id,
-                    ])
-                )
-            )
-
-            cleanup_db.commit()
+    finally:
+        cleanup_test_records(
+            SessionFactory,
+            source_owner_id,
+            destination_owner_id,
+            source_account_id,
+            destination_account_id,
+        )
