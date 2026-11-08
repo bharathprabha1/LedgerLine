@@ -23,16 +23,25 @@ import {
 } from 'lucide-react'
 
 import AuthScreen from './AuthScreen'
+import AccountsPage from './AccountsPage'
+import TransactionsPage from './TransactionsPage'
+import DepositModal from './DepositModal'
+import WithdrawalModal from './WithdrawalModal'
+import TransferModal from './TransferModal'
+
 import {
   getCurrentUser,
   getStoredToken,
   logoutUser,
 } from './services/auth'
+
 import {
   getAccounts,
   getTransactions,
 } from './services/banking'
+
 import type { User } from './types/auth'
+
 import type {
   Account,
   Transaction as ApiTransaction,
@@ -208,6 +217,11 @@ function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
 
+  // Transaction modal states
+  const [depositOpen, setDepositOpen] = useState(false)
+  const [withdrawalOpen, setWithdrawalOpen] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+
   // Restore and validate an existing login session.
   useEffect(() => {
     let active = true
@@ -304,6 +318,9 @@ function App() {
     setTotalTransactions(0)
     setDashboardError('')
     setDashboardLoading(false)
+    setDepositOpen(false)
+    setWithdrawalOpen(false)
+    setTransferOpen(false)
     setActivePage('Overview')
     setMobileMenuOpen(false)
   }
@@ -570,48 +587,53 @@ function App() {
 
         <div className="dashboard-container">
 
-          {/* Welcome section */}
-          <section className="welcome-section">
+          {activePage !== 'Accounts' && activePage !== 'Transactions' && (
+            <section className="welcome-section">
 
-            <div>
-              <div className="date-label">
-                {new Intl.DateTimeFormat('en-IN', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                }).format(new Date()).toUpperCase()}
+              <div>
+                <div className="date-label">
+                  {new Intl.DateTimeFormat('en-IN', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  }).format(new Date()).toUpperCase()}
+                </div>
+
+                <h1>
+                  {activePage === 'Overview'
+                    ? `Welcome, ${currentUser.full_name.split(' ')[0]}`
+                    : activePage}
+                </h1>
+
+                <p>
+                  {activePage === 'Overview'
+                    ? "Here's what's happening with your finances today."
+                    : `Manage and review your ${activePage.toLowerCase()} information.`}
+                </p>
               </div>
 
-              <h1>
-                {activePage === 'Overview'
-                  ? `Welcome, ${currentUser.full_name.split(' ')[0]}`
-                  : activePage}
-              </h1>
+              <button
+                className="outline-button"
+                onClick={() => void refreshDashboard()}
+                disabled={dashboardLoading}
+                title="Refresh account information"
+              >
+                <RefreshCw
+                  size={16}
+                  className={dashboardLoading ? 'refresh-spinning' : ''}
+                />
+                <span>Refresh data</span>
+              </button>
 
-              <p>
-                {activePage === 'Overview'
-                  ? "Here's what's happening with your finances today."
-                  : `Manage and review your ${activePage.toLowerCase()} information.`}
-              </p>
-            </div>
+            </section>
+          )}
 
-            <button
-              className="outline-button"
-              onClick={() => void refreshDashboard()}
-              disabled={dashboardLoading}
-              title="Refresh account information"
-            >
-              <RefreshCw
-                size={16}
-                className={dashboardLoading ? 'refresh-spinning' : ''}
-              />
-              <span>Refresh data</span>
-            </button>
-
-          </section>
-
-          {activePage === 'Overview' ? (
+          {activePage === 'Accounts' ? (
+            <AccountsPage currentUser={currentUser} />
+          ) : activePage === 'Transactions' ? (
+            <TransactionsPage />
+          ) : activePage === 'Overview' ? (
             <>
 
               {/* Backend status and data information */}
@@ -737,16 +759,27 @@ function App() {
                 <div className="section-heading">
                   <div>
                     <h2>Quick actions</h2>
-                    <p>Transaction actions will be available here</p>
+                    <p>
+                      {currentUser.role === 'ACCOUNT_HOLDER'
+                        ? 'Manage your account transactions'
+                        : 'Transaction actions are restricted for your role'}
+                    </p>
                   </div>
                 </div>
 
                 <div className="quick-actions">
 
+                  {/* Deposit */}
                   <button
                     className="quick-action"
-                    disabled
-                    title="Deposit interface is not implemented yet"
+                    type="button"
+                    disabled={currentUser.role !== 'ACCOUNT_HOLDER'}
+                    onClick={() => setDepositOpen(true)}
+                    title={
+                      currentUser.role === 'ACCOUNT_HOLDER'
+                        ? 'Deposit funds into your account'
+                        : 'Only account holders can deposit money'
+                    }
                   >
                     <span className="quick-icon deposit-quick">
                       <Plus size={21} />
@@ -760,10 +793,17 @@ function App() {
                     <ArrowUpRight className="quick-arrow" size={17} />
                   </button>
 
+                  {/* Transfer */}
                   <button
                     className="quick-action"
-                    disabled
-                    title="Transfer interface is not implemented yet"
+                    type="button"
+                    disabled={currentUser.role !== 'ACCOUNT_HOLDER'}
+                    onClick={() => setTransferOpen(true)}
+                    title={
+                      currentUser.role === 'ACCOUNT_HOLDER'
+                        ? 'Transfer money to another eligible account'
+                        : 'Only account holders can transfer money'
+                    }
                   >
                     <span className="quick-icon transfer-quick">
                       <ArrowLeftRight size={21} />
@@ -777,10 +817,17 @@ function App() {
                     <ArrowUpRight className="quick-arrow" size={17} />
                   </button>
 
+                  {/* Withdrawal */}
                   <button
                     className="quick-action"
-                    disabled
-                    title="Withdrawal interface is not implemented yet"
+                    type="button"
+                    disabled={currentUser.role !== 'ACCOUNT_HOLDER'}
+                    onClick={() => setWithdrawalOpen(true)}
+                    title={
+                      currentUser.role === 'ACCOUNT_HOLDER'
+                        ? 'Withdraw funds from your account'
+                        : 'Only account holders can withdraw money'
+                    }
                   >
                     <span className="quick-icon withdraw-quick">
                       <ArrowUpRight size={21} />
@@ -892,13 +939,13 @@ function App() {
                             </strong>
 
                             <span
-                              className={`status status-${
+                              className={`status-${
                                 transaction.status === 'POSTED'
                                   ? 'completed'
                                   : transaction.status === 'PENDING'
                                     ? 'pending'
                                     : 'failed'
-                              }`}
+                              } status`}
                             >
                               {getStatusLabel(transaction.status)}
                             </span>
@@ -1067,6 +1114,41 @@ function App() {
 
         </div>
       </main>
+
+      {/* Deposit modal */}
+      {depositOpen && currentUser.role === 'ACCOUNT_HOLDER' && (
+        <DepositModal
+          accounts={accounts}
+          onClose={() => setDepositOpen(false)}
+          onSuccess={async () => {
+            await refreshDashboard()
+          }}
+        />
+      )}
+
+      {/* Withdrawal modal */}
+      {withdrawalOpen &&
+        currentUser.role === 'ACCOUNT_HOLDER' && (
+          <WithdrawalModal
+            accounts={accounts}
+            onClose={() => setWithdrawalOpen(false)}
+            onSuccess={async () => {
+              await refreshDashboard()
+            }}
+          />
+        )}
+
+      {/* Transfer modal */}
+      {transferOpen && currentUser.role === 'ACCOUNT_HOLDER' && (
+        <TransferModal
+          accounts={accounts}
+          onClose={() => setTransferOpen(false)}
+          onSuccess={async () => {
+            await refreshDashboard()
+          }}
+        />
+      )}
+
     </div>
   )
 }
