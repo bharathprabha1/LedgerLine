@@ -64,7 +64,11 @@ class Account(Base):
     )
 
     status: Mapped[AccountStatus] = mapped_column(
-        SQLEnum(AccountStatus, name="account_status", native_enum=False),
+        SQLEnum(
+            AccountStatus,
+            name="account_status",
+            native_enum=False,
+        ),
         nullable=False,
         default=AccountStatus.ACTIVE,
     )

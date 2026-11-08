@@ -2,13 +2,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.account import Account
-from app.models.enums import UserRole
+from app.models.enums import AccountStatus, UserRole
 from app.models.user import User
 from app.schemas.account import (
     AccountCreate,
@@ -28,6 +29,25 @@ router = APIRouter(
     prefix="/accounts",
     tags=["Accounts"],
 )
+
+
+# ---------------------------------------------------------
+# RESPONSE MODELS
+# ---------------------------------------------------------
+
+class AccountHolderOption(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str
+    email: str
+
+
+class TransferRecipientResponse(BaseModel):
+    id: uuid.UUID
+    account_number: str
+    holder_name: str
+    currency: str
 
 
 # ---------------------------------------------------------
@@ -90,6 +110,118 @@ def list_accounts(
         )
 
     return db.scalars(query).all()
+
+
+# ---------------------------------------------------------
+# LIST ELIGIBLE ACCOUNT HOLDERS - ADMIN ONLY
+# ---------------------------------------------------------
+
+@router.get(
+    "/eligible-holders",
+    response_model=list[AccountHolderOption],
+)
+def list_eligible_account_holders(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Return active account holders for the admin account
+    creation dropdown.
+
+    Only administrators can access this endpoint.
+    """
+
+    holders = db.scalars(
+        select(User)
+        .where(
+            User.role == UserRole.ACCOUNT_HOLDER,
+            User.is_active.is_(True),
+        )
+        .order_by(
+            User.full_name.asc(),
+            User.email.asc(),
+        )
+    ).all()
+
+    return holders
+
+
+# ---------------------------------------------------------
+# TRANSFER RECIPIENT LOOKUP - ACCOUNT HOLDERS
+# ---------------------------------------------------------
+
+@router.get(
+    "/recipient-lookup",
+    response_model=TransferRecipientResponse,
+)
+def lookup_transfer_recipient(
+    account_number: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Look up an eligible transfer recipient using an exact
+    account number.
+
+    Only authenticated account holders can use this endpoint.
+    Recipient balances and private information are not exposed.
+    """
+
+    if current_user.role != UserRole.ACCOUNT_HOLDER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only account holders can look up "
+                "transfer recipients."
+            ),
+        )
+
+    normalized_number = account_number.strip()
+
+    if not normalized_number or len(normalized_number) > 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid account number.",
+        )
+
+    account = db.scalar(
+        select(Account).where(
+            Account.account_number == normalized_number,
+            Account.is_system.is_(False),
+            Account.status == AccountStatus.ACTIVE,
+        )
+    )
+
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Eligible recipient account not found.",
+        )
+
+    owner = db.get(User, account.owner_id)
+
+    if (
+        owner is None
+        or not owner.is_active
+        or owner.role != UserRole.ACCOUNT_HOLDER
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Eligible recipient account not found.",
+        )
+
+    if account.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot transfer money to your own account.",
+        )
+
+    return TransferRecipientResponse(
+        id=account.id,
+        account_number=account.account_number,
+        holder_name=owner.full_name,
+        currency=account.currency,
+    )
 
 
 # ---------------------------------------------------------

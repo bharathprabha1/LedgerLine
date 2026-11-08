@@ -1,4 +1,4 @@
-ï»¿import uuid
+import uuid
 
 import pytest
 from fastapi import HTTPException

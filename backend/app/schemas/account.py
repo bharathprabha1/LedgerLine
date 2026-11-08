@@ -24,4 +24,5 @@ class AccountResponse(BaseModel):
     balance_paise: int
     currency: str
     status: AccountStatus
+    is_system: bool
     created_at: datetime
