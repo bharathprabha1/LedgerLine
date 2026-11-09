@@ -25,6 +25,7 @@ import {
 import AuthScreen from './AuthScreen'
 import AccountsPage from './AccountsPage'
 import TransactionsPage from './TransactionsPage'
+import StatementsPage from './StatementsPage'
 import DepositModal from './DepositModal'
 import WithdrawalModal from './WithdrawalModal'
 import TransferModal from './TransferModal'
@@ -587,7 +588,9 @@ function App() {
 
         <div className="dashboard-container">
 
-          {activePage !== 'Accounts' && activePage !== 'Transactions' && (
+          {activePage !== 'Accounts' &&
+            activePage !== 'Transactions' &&
+            activePage !== 'Statements' && (
             <section className="welcome-section">
 
               <div>
@@ -633,6 +636,8 @@ function App() {
             <AccountsPage currentUser={currentUser} />
           ) : activePage === 'Transactions' ? (
             <TransactionsPage />
+          ) : activePage === 'Statements' ? (
+            <StatementsPage accounts={accounts} />
           ) : activePage === 'Overview' ? (
             <>
 

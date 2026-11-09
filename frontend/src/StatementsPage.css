@@ -1,0 +1,239 @@
+
+.statements-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  min-width: 0;
+}
+
+.statements-heading,
+.statements-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.statements-heading h2,
+.statements-panel-heading h3 {
+  margin: 0;
+  color: var(--text, #1c2925);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.statements-heading p,
+.statements-panel-heading p {
+  margin: 5px 0 0;
+  color: var(--muted, #84908b);
+  font-size: 12px;
+}
+
+.statements-account-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.statements-account-selector label {
+  color: var(--muted, #84908b);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.statements-account-selector select {
+  width: 100%;
+  max-width: 440px;
+  height: 42px;
+  padding: 0 12px;
+  color: var(--text, #1c2925);
+  background: white;
+  border: 1px solid var(--border, #e9eeeb);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.statements-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.statements-summary-card {
+  min-width: 0;
+  padding: 18px;
+  background: white;
+  border: 1px solid var(--border, #e9eeeb);
+  border-radius: 10px;
+}
+
+.statements-summary-card span {
+  display: block;
+  color: var(--muted, #84908b);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statements-summary-card strong {
+  display: block;
+  margin-top: 12px;
+  color: var(--text, #1c2925);
+  font-size: 19px;
+  overflow-wrap: anywhere;
+}
+
+.statements-summary-card.closing {
+  background: #edf7f1;
+  border-color: #d5eadc;
+}
+
+.statements-summary-card.closing strong,
+.statement-credit {
+  color: #12835e;
+}
+
+.statement-debit {
+  color: #c05a50;
+}
+
+.statements-table-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statements-panel-heading {
+  margin-bottom: 17px;
+}
+
+.statements-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border, #e9eeeb);
+  border-radius: 9px;
+}
+
+.statements-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.statements-table thead {
+  background: #f8faf9;
+}
+
+.statements-table th {
+  padding: 13px;
+  color: #75827c;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border, #e9eeeb);
+}
+
+.statements-table td {
+  padding: 13px;
+  color: var(--text, #1c2925);
+  font-size: 11px;
+  border-bottom: 1px solid #eef1ef;
+}
+
+.statements-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.statements-table tbody tr:hover {
+  background: #fbfdfc;
+}
+
+.statement-date {
+  color: #68766f !important;
+}
+
+.statement-description {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #84908b);
+  font-size: 10px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statement-type {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.statements-note {
+  margin: 13px 0 0;
+  color: var(--muted, #84908b);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.statements-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  text-align: center;
+  color: var(--muted, #84908b);
+}
+
+.statements-empty h3 {
+  margin: 12px 0 0;
+  color: var(--text, #1c2925);
+  font-size: 15px;
+}
+
+.statements-empty p {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+
+.statements-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: #a33d35;
+  background: #fff3f1;
+  border: 1px solid #f3d2ce;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.statements-alert span {
+  flex: 1;
+}
+
+.statements-alert button {
+  padding: 5px 10px;
+  color: #a33d35;
+  background: white;
+  border: 1px solid #f3d2ce;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .statements-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .statements-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .statements-summary {
+    grid-template-columns: 1fr;
+  }
+}
