@@ -310,9 +310,12 @@ function App() {
     setActivePage('Overview')
   }
 
-  // Handle logout.
+  // Handle logout and immediately return to a fresh unauthenticated session.
   const handleLogout = () => {
+    // Remove credentials first so no subsequent request can reuse this session.
     logoutUser()
+
+    // Clear all user-specific data held in React state.
     setCurrentUser(null)
     setAccounts([])
     setApiTransactions([])
@@ -324,6 +327,9 @@ function App() {
     setTransferOpen(false)
     setActivePage('Overview')
     setMobileMenuOpen(false)
+
+    // Force a full app restart; the session restore check will now show AuthScreen.
+    window.location.replace('/')
   }
 
   const closeMobileMenu = () => setMobileMenuOpen(false)
@@ -528,8 +534,10 @@ function App() {
           </div>
 
           <button
+            type="button"
             className="logout-button"
             onClick={handleLogout}
+            aria-label="Sign out of LedgerLine"
           >
             <LogOut size={17} />
             <span>Sign out</span>
