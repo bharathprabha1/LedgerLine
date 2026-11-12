@@ -58,6 +58,7 @@ export interface StatementItem {
   transaction_id: string
   reference: string
   transaction_type: TransactionType
+  initiated_by: string
   status: TransactionStatus
   description: string | null
   created_at: string

@@ -1,3 +1,4 @@
+
 import uuid
 
 from fastapi import HTTPException
@@ -163,7 +164,9 @@ def get_account_statement(
         )
     ).all()
 
-    transaction_ids = [transaction.id for transaction in transactions]
+    transaction_ids = [
+        transaction.id for transaction in transactions
+    ]
 
     entries = []
 
@@ -224,6 +227,7 @@ def get_account_statement(
                 transaction_id=transaction.id,
                 reference=transaction.reference,
                 transaction_type=transaction.transaction_type,
+                initiated_by=transaction.initiated_by,
                 status=transaction.status,
                 description=transaction.description,
                 created_at=transaction.created_at,

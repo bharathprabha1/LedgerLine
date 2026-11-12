@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime
 
@@ -36,6 +37,7 @@ class StatementItem(BaseModel):
     transaction_id: uuid.UUID
     reference: str
     transaction_type: TransactionType
+    initiated_by: uuid.UUID
     status: TransactionStatus
     description: str | None
     created_at: datetime

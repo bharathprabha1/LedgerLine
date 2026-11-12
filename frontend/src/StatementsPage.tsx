@@ -43,6 +43,15 @@ const formatDate = (value: string) => {
   }).format(date)
 }
 
+// Display a compact ID while retaining the complete ID in the title.
+const formatInitiator = (userId: string) => {
+  if (!userId) return 'Unavailable'
+
+  if (userId.length <= 12) return userId
+
+  return `${userId.slice(0, 8)}...${userId.slice(-4)}`
+}
+
 const statusLabel = (status: StatementItem['status']) => {
   switch (status) {
     case 'POSTED':
@@ -325,6 +334,7 @@ export default function StatementsPage({
                           <th>Date</th>
                           <th>Reference</th>
                           <th>Type</th>
+                          <th>Initiated by</th>
                           <th>Status</th>
                           <th>Debit</th>
                           <th>Credit</th>
@@ -361,6 +371,15 @@ export default function StatementsPage({
                               <td>
                                 <span className="statement-type">
                                   {item.transaction_type}
+                                </span>
+                              </td>
+
+                              <td>
+                                <span
+                                  title={`Full user ID: ${item.initiated_by}`}
+                                  aria-label={`Initiated by user ${item.initiated_by}`}
+                                >
+                                  {formatInitiator(item.initiated_by)}
                                 </span>
                               </td>
 
