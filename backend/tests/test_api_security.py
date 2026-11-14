@@ -1,12 +1,15 @@
-﻿
-import uuid
+﻿import uuid
 
 import pytest
 from sqlalchemy import select
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.main import app
 from app.models.account import Account
 from app.models.audit_log import AuditLog
@@ -59,6 +62,7 @@ def create_auth_headers(user):
     token = create_access_token(
         user_id=user.id,
         role=user.role.value,
+        token_version=user.token_version,
     )
 
     return {"Authorization": f"Bearer {token}"}
@@ -125,6 +129,208 @@ def test_authenticated_user_can_access_profile(client, customer):
     assert response.status_code == 200
     assert response.json()["id"] == str(customer.id)
     assert response.json()["role"] == "ACCOUNT_HOLDER"
+
+
+
+def test_customer_can_update_own_profile(client, customer):
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers=create_auth_headers(customer),
+        json={
+            "full_name": "Updated Customer Name",
+            "email": "updated-customer@example.com",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Updated Customer Name"
+    assert response.json()["email"] == "updated-customer@example.com"
+    assert response.json()["id"] == str(customer.id)
+
+
+def test_customer_cannot_use_another_users_email(
+    client,
+    customer,
+    admin,
+):
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers=create_auth_headers(customer),
+        json={"email": admin.email},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This email is already registered"
+
+
+def test_unauthenticated_user_cannot_update_profile(client):
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"full_name": "Unauthorized Update"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_customer_can_update_only_full_name(client, customer):
+    original_email = customer.email
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers=create_auth_headers(customer),
+        json={"full_name": "Name Only Update"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Name Only Update"
+    assert response.json()["email"] == original_email
+
+
+def test_customer_can_change_own_password(client, customer, db):
+    old_password = "TestPassword@2026"
+    new_password = "NewSecurePassword@2026"
+
+    response = client.patch(
+        "/api/v1/auth/change-password",
+        headers=create_auth_headers(customer),
+        json={
+            "current_password": old_password,
+            "new_password": new_password,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Password changed successfully. Please log in again."
+    }
+
+    db.refresh(customer)
+    assert verify_password(new_password, customer.password_hash)
+    assert not verify_password(old_password, customer.password_hash)
+
+
+def test_password_change_invalidates_old_access_token(
+    client,
+    customer,
+):
+    old_password = "TestPassword@2026"
+    new_password = "NewSecurePassword@2026"
+    old_headers = create_auth_headers(customer)
+
+    change_response = client.patch(
+        "/api/v1/auth/change-password",
+        headers=old_headers,
+        json={
+            "current_password": old_password,
+            "new_password": new_password,
+        },
+    )
+
+    assert change_response.status_code == 200
+
+    old_token_response = client.get(
+        "/api/v1/auth/me",
+        headers=old_headers,
+    )
+    assert old_token_response.status_code == 401
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": customer.email,
+            "password": new_password,
+        },
+    )
+    assert login_response.status_code == 200
+
+    new_headers = {
+        "Authorization": (
+            f"Bearer {login_response.json()['access_token']}"
+        )
+    }
+    new_token_response = client.get(
+        "/api/v1/auth/me",
+        headers=new_headers,
+    )
+
+    assert new_token_response.status_code == 200
+    assert new_token_response.json()["id"] == str(customer.id)
+
+
+def test_password_change_rejects_incorrect_current_password(
+    client,
+    customer,
+    db,
+):
+    original_hash = customer.password_hash
+
+    response = client.patch(
+        "/api/v1/auth/change-password",
+        headers=create_auth_headers(customer),
+        json={
+            "current_password": "IncorrectPassword@2026",
+            "new_password": "NewSecurePassword@2026",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Current password is incorrect"
+
+    db.refresh(customer)
+    assert customer.password_hash == original_hash
+
+
+def test_password_change_rejects_reusing_current_password(
+    client,
+    customer,
+    db,
+):
+    original_hash = customer.password_hash
+
+    response = client.patch(
+        "/api/v1/auth/change-password",
+        headers=create_auth_headers(customer),
+        json={
+            "current_password": "TestPassword@2026",
+            "new_password": "TestPassword@2026",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "New password must be different from the current password"
+    )
+
+    db.refresh(customer)
+    assert customer.password_hash == original_hash
+
+
+def test_unauthenticated_user_cannot_change_password(client):
+    response = client.patch(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "TestPassword@2026",
+            "new_password": "NewSecurePassword@2026",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_password_change_rejects_new_password_shorter_than_12_characters(
+    client,
+    customer,
+):
+    response = client.patch(
+        "/api/v1/auth/change-password",
+        headers=create_auth_headers(customer),
+        json={
+            "current_password": "TestPassword@2026",
+            "new_password": "Short@123",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_inactive_user_cannot_access_protected_route(

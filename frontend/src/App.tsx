@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -26,6 +26,7 @@ import AuthScreen from './AuthScreen'
 import AccountsPage from './AccountsPage'
 import TransactionsPage from './TransactionsPage'
 import StatementsPage from './StatementsPage'
+import SettingsPage from './components/SettingsPage'
 import DepositModal from './DepositModal'
 import WithdrawalModal from './WithdrawalModal'
 import TransferModal from './TransferModal'
@@ -51,6 +52,7 @@ import type {
 } from './types/banking'
 
 import './App.css'
+import './HelpSupport.css'
 
 type TransactionFilter = 'All' | 'Deposit' | 'Withdrawal' | 'Transfer'
 
@@ -208,6 +210,8 @@ function App() {
   // Dashboard navigation state
   const [activePage, setActivePage] = useState('Overview')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
   const [activeFilter, setActiveFilter] =
     useState<TransactionFilter>('All')
 
@@ -222,6 +226,34 @@ function App() {
   const [depositOpen, setDepositOpen] = useState(false)
   const [withdrawalOpen, setWithdrawalOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
+
+  // Close the profile dropdown when clicking outside it or pressing Escape.
+  useEffect(() => {
+    if (!profileMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
+        setProfileMenuOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setProfileMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [profileMenuOpen])
 
   // Restore and validate an existing login session.
   useEffect(() => {
@@ -327,6 +359,7 @@ function App() {
     setTransferOpen(false)
     setActivePage('Overview')
     setMobileMenuOpen(false)
+    setProfileMenuOpen(false)
 
     // Force a full app restart; the session restore check will now show AuthScreen.
     window.location.replace('/')
@@ -522,26 +555,42 @@ function App() {
             </p>
           </div>
 
-          <div className="profile-row">
-            <div className="avatar">{initials}</div>
+          <div className="profile-menu-container" ref={profileMenuRef}>
+            <div className="profile-row">
+              <div className="avatar">{initials}</div>
 
-            <div className="profile-info">
-              <strong>{currentUser.full_name}</strong>
-              <span>{currentUser.role.replace(/_/g, ' ')}</span>
+              <div className="profile-info">
+                <strong>{currentUser.full_name}</strong>
+                <span>{currentUser.role.replace(/_/g, ' ')}</span>
+              </div>
+
+              <button
+                type="button"
+                className="profile-menu-trigger"
+                onClick={() => setProfileMenuOpen((open) => !open)}
+                aria-label="Open profile menu"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+                title="Profile options"
+              >
+                <MoreHorizontal size={19} />
+              </button>
             </div>
 
-            <MoreHorizontal size={19} />
+            {profileMenuOpen && (
+              <div className="profile-dropdown" role="menu" aria-label="Profile options">
+                <button
+                  type="button"
+                  className="profile-dropdown-item"
+                  role="menuitem"
+                  onClick={handleLogout}
+                >
+                  <LogOut size={17} />
+                  <span>Sign out</span>
+                </button>
+              </div>
+            )}
           </div>
-
-          <button
-            type="button"
-            className="logout-button"
-            onClick={handleLogout}
-            aria-label="Sign out of LedgerLine"
-          >
-            <LogOut size={17} />
-            <span>Sign out</span>
-          </button>
 
         </div>
       </aside>
@@ -1101,27 +1150,72 @@ function App() {
               </footer>
 
             </>
+          ) : activePage === 'Settings' ? (
+            <SettingsPage
+              currentUser={currentUser}
+              onUserUpdated={setCurrentUser}
+              onPasswordChanged={handleLogout}
+            />
+          ) : activePage === 'Help & Support' ? (
+            <section className="help-support-page">
+              <div className="help-intro panel">
+                <div className="help-intro-icon"><CircleHelp size={25} /></div>
+                <div>
+                  <h2>How can we help?</h2>
+                  <p>Find answers to common questions about using LedgerLine.</p>
+                </div>
+              </div>
+
+              <div className="help-section-heading">
+                <h2>Frequently asked questions</h2>
+                <p>Quick guidance for your LedgerLine account.</p>
+              </div>
+
+              <div className="help-faq-grid">
+                <article className="panel help-faq-card">
+                  <h3>How do I check my account balance?</h3>
+                  <p>Open Overview to see your current account balance, or choose Accounts to review your connected accounts.</p>
+                </article>
+                <article className="panel help-faq-card">
+                  <h3>Where can I find my transactions?</h3>
+                  <p>Open Transactions from the sidebar to review your transaction history and available details.</p>
+                </article>
+                <article className="panel help-faq-card">
+                  <h3>How do I update my profile?</h3>
+                  <p>Go to Settings, edit your name or email address, and save your changes.</p>
+                </article>
+                <article className="panel help-faq-card">
+                  <h3>How can I change my password?</h3>
+                  <p>Use the Change password section in Settings. You will need your current password and must sign in again after a successful change.</p>
+                </article>
+                <article className="panel help-faq-card">
+                  <h3>Why can't I make a deposit or transfer?</h3>
+                  <p>Transaction actions are available only to users with the Account Holder role. Other roles have restricted access.</p>
+                </article>
+                <article className="panel help-faq-card">
+                  <h3>What should I do if information does not load?</h3>
+                  <p>Use Refresh data on the page. If the issue continues, sign out and sign in again. Do not share your password or verification details.</p>
+                </article>
+              </div>
+
+              <div className="panel help-contact-panel">
+                <div>
+                  <h3>Still need help?</h3>
+                  <p>For account-specific assistance, contact your LedgerLine administrator. No support-ticket submission is connected in this version.</p>
+                </div>
+                <ShieldCheck size={25} />
+              </div>
+            </section>
           ) : (
             <section className="placeholder-panel">
-
               <div className="placeholder-icon">
                 <ArrowUpDown size={27} />
               </div>
-
               <h2>{activePage}</h2>
-
-              <p>
-                This section's interface will be connected to the
-                LedgerLine API in the next development steps.
-              </p>
-
-              <button
-                className="primary-button"
-                onClick={() => setActivePage('Overview')}
-              >
+              <p>This section is not available.</p>
+              <button className="primary-button" onClick={() => setActivePage('Overview')}>
                 Back to overview
               </button>
-
             </section>
           )}
 

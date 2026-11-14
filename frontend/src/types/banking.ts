@@ -23,7 +23,18 @@ export interface Account {
   created_at: string
 }
 
+// Recipient search result.
+// Only the holder's name and last four account digits
+// should be displayed in the recipient search list.
+export interface RecipientSearchResult {
+  id: string
+  holder_name: string
+  last_four_digits: string
+}
+
 // Verified recipient information returned by the backend.
+// Used after selecting a search result or manually verifying
+// an account number.
 export interface RecipientLookup {
   id: string
   account_number: string

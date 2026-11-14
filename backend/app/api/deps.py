@@ -35,15 +35,40 @@ def get_current_user(
 
     try:
         payload = decode_access_token(credentials.credentials)
-        user_id = uuid.UUID(payload["sub"])
-    except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
+
+        # Validate the subject claim before UUID conversion.
+        subject = payload.get("sub")
+
+        if not isinstance(subject, str) or not subject:
+            raise unauthorized
+
+        user_id = uuid.UUID(subject)
+
+        # Validate the token version claim.
+        token_version = payload["token_version"]
+
+        if type(token_version) is not int or token_version < 0:
+            raise unauthorized
+
+    except (
+        jwt.InvalidTokenError,
+        ValueError,
+        KeyError,
+        TypeError,
+    ):
         raise unauthorized
 
+    # Load the user from the database.
     user = db.scalar(
         select(User).where(User.id == user_id)
     )
 
-    if user is None or not user.is_active:
+    # Reject missing users, inactive users, and revoked tokens.
+    if (
+        user is None
+        or not user.is_active
+        or user.token_version != token_version
+    ):
         raise unauthorized
 
     return user

@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -21,6 +22,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(
     user_id: uuid.UUID,
     role: str,
+    token_version: int,
 ) -> str:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(
@@ -30,6 +32,7 @@ def create_access_token(
     payload = {
         "sub": str(user_id),
         "role": role,
+        "token_version": token_version,
         "iat": now,
         "exp": expires_at,
         "jti": str(uuid.uuid4()),
@@ -47,5 +50,13 @@ def decode_access_token(token: str) -> dict:
         token,
         settings.secret_key.get_secret_value(),
         algorithms=[settings.jwt_algorithm],
-        options={"require": ["sub", "exp", "iat", "jti"]},
+        options={
+            "require": [
+                "sub",
+                "exp",
+                "iat",
+                "jti",
+                "token_version",
+            ]
+        },
     )

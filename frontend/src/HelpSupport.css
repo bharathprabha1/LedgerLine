@@ -1,0 +1,14 @@
+/* Help & Support page styles — scoped to this page only. */
+.help-support-page { display: grid; gap: 22px; }
+.help-intro { display: flex; align-items: center; gap: 16px; padding: 22px; }
+.help-intro-icon { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border-radius: 14px; color: var(--green-dark, #087a55); background: var(--green-soft, #e8f5ef); }
+.help-intro h2, .help-section-heading h2, .help-contact-panel h3 { margin: 0 0 6px; color: var(--text, #1c2925); }
+.help-intro p, .help-section-heading p, .help-contact-panel p { margin: 0; color: var(--muted, #84908b); line-height: 1.6; }
+.help-section-heading { margin-top: 4px; }
+.help-faq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.help-faq-card { padding: 20px; }
+.help-faq-card h3 { margin: 0 0 10px; color: var(--text, #1c2925); font-size: 15px; }
+.help-faq-card p { margin: 0; color: var(--muted, #84908b); font-size: 14px; line-height: 1.7; }
+.help-contact-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px; color: var(--green-dark, #087a55); }
+.help-contact-panel > svg { flex: 0 0 auto; }
+@media (max-width: 720px) { .help-faq-grid { grid-template-columns: 1fr; } .help-intro, .help-contact-panel { align-items: flex-start; } }

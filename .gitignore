@@ -25,3 +25,4 @@ reset_test_password.py
 # Backup files
 *.bak
 *.backup
+.neon

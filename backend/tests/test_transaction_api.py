@@ -42,6 +42,7 @@ def create_auth_headers(user):
     token = create_access_token(
         user_id=user.id,
         role=user.role.value,
+        token_version=user.token_version,
     )
     return {"Authorization": f"Bearer {token}"}
 

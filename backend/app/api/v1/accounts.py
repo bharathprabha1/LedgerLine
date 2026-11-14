@@ -1,7 +1,6 @@
-
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -51,6 +50,14 @@ class TransferRecipientResponse(BaseModel):
     account_number: str
     holder_name: str
     currency: str
+
+
+class RecipientSearchResponse(BaseModel):
+    # The ID is used internally to verify the selected recipient.
+    # The frontend should display only holder_name and last_four_digits.
+    id: uuid.UUID
+    holder_name: str
+    last_four_digits: str
 
 
 # ---------------------------------------------------------
@@ -174,7 +181,6 @@ def lookup_transfer_recipient(
     - Does not expose recipient balances or private information.
     """
 
-    # Only authenticated account holders can use this endpoint.
     if current_user.role != UserRole.ACCOUNT_HOLDER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -184,7 +190,6 @@ def lookup_transfer_recipient(
             ),
         )
 
-    # Apply rate limiting before processing the account number.
     enforce_recipient_lookup_limit(
         db=db,
         user_id=current_user.id,
@@ -239,6 +244,148 @@ def lookup_transfer_recipient(
 
 
 # ---------------------------------------------------------
+# SEARCH TRANSFER RECIPIENTS BY NAME - ACCOUNT HOLDERS
+# ---------------------------------------------------------
+
+@router.get(
+    "/recipient-search",
+    response_model=list[RecipientSearchResponse],
+)
+def search_transfer_recipients(
+    q: str = Query(..., min_length=2, max_length=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Search eligible transfer recipients by account-holder name.
+
+    The response contains only the holder name and last four
+    account-number digits for display. The account ID is included
+    only so the frontend can request a secure verification.
+    """
+
+    if current_user.role != UserRole.ACCOUNT_HOLDER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only account holders can search recipients.",
+        )
+
+    enforce_recipient_lookup_limit(
+        db=db,
+        user_id=current_user.id,
+    )
+
+    search_name = q.strip()
+
+    if len(search_name) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enter at least 2 characters.",
+        )
+
+    # Treat SQL LIKE wildcard characters as literal user input.
+    escaped_name = (
+        search_name
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+    results = db.execute(
+        select(Account, User)
+        .join(User, Account.owner_id == User.id)
+        .where(
+            Account.is_system.is_(False),
+            Account.status == AccountStatus.ACTIVE,
+            Account.owner_id != current_user.id,
+            User.is_active.is_(True),
+            User.role == UserRole.ACCOUNT_HOLDER,
+            User.full_name.ilike(
+                f"{escaped_name}%",
+                escape="\\",
+            ),
+        )
+        .order_by(User.full_name.asc())
+        .limit(10)
+    ).all()
+
+    return [
+        RecipientSearchResponse(
+            id=account.id,
+            holder_name=owner.full_name,
+            last_four_digits=account.account_number[-4:],
+        )
+        for account, owner in results
+    ]
+
+
+# ---------------------------------------------------------
+# VERIFY SELECTED TRANSFER RECIPIENT BY ACCOUNT ID
+# ---------------------------------------------------------
+
+@router.get(
+    "/recipient-lookup-by-id",
+    response_model=TransferRecipientResponse,
+)
+def lookup_transfer_recipient_by_id(
+    account_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Re-verify a recipient selected from name search.
+
+    Full account details are returned only after the authenticated
+    account holder selects a result.
+    """
+
+    if current_user.role != UserRole.ACCOUNT_HOLDER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only account holders can verify recipients.",
+        )
+
+    enforce_recipient_lookup_limit(
+        db=db,
+        user_id=current_user.id,
+    )
+
+    account = db.scalar(
+        select(Account).where(
+            Account.id == account_id,
+            Account.is_system.is_(False),
+            Account.status == AccountStatus.ACTIVE,
+            Account.owner_id != current_user.id,
+        )
+    )
+
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Eligible recipient account not found.",
+        )
+
+    owner = db.get(User, account.owner_id)
+
+    if (
+        owner is None
+        or not owner.is_active
+        or owner.role != UserRole.ACCOUNT_HOLDER
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Eligible recipient account not found.",
+        )
+
+    return TransferRecipientResponse(
+        id=account.id,
+        account_number=account.account_number,
+        holder_name=owner.full_name,
+        currency=account.currency,
+    )
+
+
+# ---------------------------------------------------------
 # ACCOUNT STATEMENT
 # ---------------------------------------------------------
 
@@ -275,7 +422,6 @@ def get_account(
         Account.id == account_id
     )
 
-    # Hide system accounts and other customers' accounts.
     if current_user.role == UserRole.ACCOUNT_HOLDER:
         query = query.where(
             Account.owner_id == current_user.id,
@@ -316,7 +462,6 @@ def update_account_status(
         else None
     )
 
-    # Record denied attempts for non-administrators.
     if current_user.role != UserRole.ADMIN:
         record_audit_event(
             actor_id=current_user.id,
@@ -338,7 +483,6 @@ def update_account_status(
             detail="Administrator access required.",
         )
 
-    # System account status is protected.
     target_account = db.scalar(
         select(Account).where(
             Account.id == account_id

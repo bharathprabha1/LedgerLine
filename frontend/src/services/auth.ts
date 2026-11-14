@@ -45,6 +45,29 @@ export async function getCurrentUser(): Promise<User> {
   return response.data
 }
 
+export async function updateUserProfile(details: {
+  full_name?: string
+  email?: string
+}): Promise<User> {
+  const response = await api.patch<User>('/auth/me', details)
+
+  sessionStorage.setItem(USER_KEY, JSON.stringify(response.data))
+
+  return response.data
+}
+
+export async function changeUserPassword(details: {
+  current_password: string
+  new_password: string
+}): Promise<{ message: string }> {
+  const response = await api.patch<{ message: string }>(
+    '/auth/change-password',
+    details,
+  )
+
+  return response.data
+}
+
 export function logoutUser(): void {
   sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(USER_KEY)

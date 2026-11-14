@@ -10,6 +10,7 @@ import type {
   TransferRequest,
   TransactionActionResponse,
   RecipientLookup,
+  RecipientSearchResult,
 } from '../types/banking'
 
 // ========================================
@@ -34,6 +35,38 @@ export async function lookupRecipient(
     {
       params: {
         account_number: accountNumber.trim(),
+      },
+    },
+  )
+
+  return response.data
+}
+
+// Search eligible recipients by account-holder name.
+export async function searchRecipients(
+  query: string,
+): Promise<RecipientSearchResult[]> {
+  const response = await api.get<RecipientSearchResult[]>(
+    '/accounts/recipient-search',
+    {
+      params: {
+        q: query.trim(),
+      },
+    },
+  )
+
+  return response.data
+}
+
+// Verify a recipient selected from name-search results.
+export async function lookupRecipientById(
+  accountId: string,
+): Promise<RecipientLookup> {
+  const response = await api.get<RecipientLookup>(
+    '/accounts/recipient-lookup-by-id',
+    {
+      params: {
+        account_id: accountId,
       },
     },
   )
